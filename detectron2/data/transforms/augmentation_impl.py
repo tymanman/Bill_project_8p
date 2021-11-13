@@ -20,7 +20,7 @@ from fvcore.transforms.transform import (
 from PIL import Image
 
 from .augmentation import Augmentation, _transform_to_aug
-from .transform import ExtentTransform, ResizeTransform, RotationTransform
+from .transform import ExtentTransform, ResizeTransform, RotationTransform, Rotation3DTransform, MarginCropTransform
 
 __all__ = [
     "FixedSizeCrop",
@@ -412,6 +412,18 @@ class RandomCrop(Augmentation):
         else:
             raise NotImplementedError("Unknown crop type {}".format(self.crop_type))
 
+class RandomMarginCrop(Augmentation):
+    """
+    Randomly crop a rectangle region out of an image.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._init(locals())
+
+    def get_transform(self, image):
+        return MarginCropTransform()
+
 
 class RandomCrop_CategoryAreaConstraint(Augmentation):
     """
@@ -612,3 +624,16 @@ class RandomLighting(Augmentation):
         return BlendTransform(
             src_image=self.eigen_vecs.dot(weights * self.eigen_vals), src_weight=1.0, dst_weight=1.0
         )
+
+class RandomRotation3D(Augmentation):
+    """
+    This method returns a copy of this image, rotated the given
+    number of degrees counter clockwise around the given center.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._init(locals())
+
+    def get_transform(self, image):
+        return Rotation3DTransform()    

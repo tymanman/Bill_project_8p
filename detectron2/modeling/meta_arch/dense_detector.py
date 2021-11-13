@@ -89,6 +89,7 @@ class DenseDetector(nn.Module):
             loss. Used during training only. In inference, the standard output format, described
             in :doc:`/tutorials/models`.
         """
+        ##lili load tensor to cuda
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
         features = [features[f] for f in self.head_in_features]

@@ -309,6 +309,7 @@ class AugInput:
         image: np.ndarray,
         *,
         boxes: Optional[np.ndarray] = None,
+        coords: Optional[np.ndarray] = None,
         sem_seg: Optional[np.ndarray] = None,
     ):
         """
@@ -323,6 +324,7 @@ class AugInput:
         _check_img_dtype(image)
         self.image = image
         self.boxes = boxes
+        self.coords = coords
         self.sem_seg = sem_seg
 
     def transform(self, tfm: Transform) -> None:
@@ -332,7 +334,12 @@ class AugInput:
         By "in-place", it means after calling this method, accessing an attribute such
         as ``self.image`` will return transformed data.
         """
-        self.image = tfm.apply_image(self.image)
+        if vars(tfm).setdefault("aug_with_box", False):
+            self.image = tfm.apply_image(self.image, self.coords)
+        else:
+            self.image = tfm.apply_image(self.image)
+        if self.coords is not None:
+            self.coords = tfm.apply_coords(self.coords)
         if self.boxes is not None:
             self.boxes = tfm.apply_box(self.boxes)
         if self.sem_seg is not None:

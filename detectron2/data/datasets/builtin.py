@@ -28,6 +28,7 @@ from .coco import load_sem_seg, register_coco_instances
 from .coco_panoptic import register_coco_panoptic, register_coco_panoptic_separated
 from .lvis import get_lvis_instances_meta, register_lvis_instances
 from .pascal_voc import register_pascal_voc
+from .bill_card import register_bill_card
 
 # ==== Predefined datasets and splits for COCO ==========
 
@@ -232,6 +233,14 @@ def register_all_pascal_voc(root):
         register_pascal_voc(name, os.path.join(root, dirname), split, year)
         MetadataCatalog.get(name).evaluator_type = "pascal_voc"
 
+def register_all_bill_card(root):
+    SPLITS = [
+        ("bill_card_train", "bill_card_data", "train"),
+        ("bill_card_val", "bill_card_data", "val"),
+    ]
+    for name, dirname, split in SPLITS:
+        register_bill_card(name, os.path.join(root, dirname), split)
+        MetadataCatalog.get(name).evaluator_type = "None" ## ToDo
 
 def register_all_ade20k(root):
     root = os.path.join(root, "ADEChallengeData2016")
@@ -262,3 +271,4 @@ if __name__.endswith(".builtin"):
     register_all_cityscapes_panoptic(_root)
     register_all_pascal_voc(_root)
     register_all_ade20k(_root)
+    register_all_bill_card(_root)

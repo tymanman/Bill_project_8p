@@ -39,6 +39,7 @@ class BoxMode(IntEnum):
     (xc, yc, w, h, a) in absolute floating points coordinates.
     (xc, yc) is the center of the rotated box, and the angle a is in degrees ccw.
     """
+    XY_POLY_4 = 5
 
     @staticmethod
     def convert(box: _RawBoxType, from_mode: "BoxMode", to_mode: "BoxMode") -> _RawBoxType:

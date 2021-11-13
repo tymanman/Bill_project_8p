@@ -246,6 +246,147 @@ class RotationTransform(Transform):
         )
         return TransformList([rotation, crop])
 
+class Rotation3DTransform(Transform):
+    """
+    This method returns a copy of this image, rotated the given
+    number of degrees counter clockwise around its center.
+    """
+
+    def __init__(self, anglex_vari=20, angley_vari=20, anglez_vari=150, fov=42):
+        """
+        Args:
+            h, w (int): original image size
+            angle (float): degrees for rotation
+            expand (bool): choose if the image should be resized to fit the whole
+                rotated image (default), or simply cropped
+            center (tuple (width, height)): coordinates of the rotation center
+                if left to None, the center will be fit to the center of each image
+                center has no effect if expand=True because it only affects shifting
+            interp: cv2 interpolation method, default cv2.INTER_LINEAR
+        """
+        super().__init__()
+        self._set_attributes(locals())
+        self.anglex_vari = anglex_vari
+        self.angley_vari = angley_vari
+        self.anglez_vari = anglez_vari
+        self.fov = fov
+        self.warpR, self.new_shape = self.get_warpR()
+
+    def apply_image(self, img):
+        """
+        img should be a numpy array, formatted as Height * Width * Nchannels
+        """
+        if len(img) == 0:
+            return img
+        assert img.shape[:2] == (self.h, self.w)
+        img = cv2.warpPerspective(img, self.warpR, self.new_shape,borderMode=cv2.BORDER_REPLICATE)
+        return img
+
+    def apply_coords(self, coords):
+        """
+        coords should be a N * 2 array-like, containing N couples of (x, y) points
+        """
+        keypoint_3dim =  np.concatenate((coords, np.ones((4, 1))), 1).transpose(1,0)
+        project_keyp = np.matmul(self.warpR, keypoint_3dim)
+        project_keyp[0, :] /= project_keyp[2, :]
+        project_keyp[1, :] /= project_keyp[2, :]
+        project_keyp = project_keyp[:2, :].transpose(1, 0)
+        return project_keyp
+
+    def apply_box(self, box):
+        raise NotImplementedError
+
+    def get_warpR(self, img):
+        def rad(x):
+            return x * np.pi / 180
+        h, w = img.shape[0:2]
+        
+        anglex = np.random.uniform(-self.anglex_vari, self.anglex_vari)
+        angley = np.random.uniform(-self.angley_vari, self.angley_vari)
+        anglez = np.random.uniform(-self.anglez_vari, self.anglez_vari)
+        # 镜头与图像间的距离，21为半可视角，算z的距离是为了保证在此可视角度下恰好显示整幅图像
+        z = np.sqrt(w ** 2 + h ** 2) / 2 / np.tan(rad(self.fov / 2))
+        # 齐次变换矩阵
+        rx = np.array([[1, 0, 0, 0],
+                    [0, np.cos(rad(anglex)), -np.sin(rad(anglex)), 0],
+                    [0, -np.sin(rad(anglex)), np.cos(rad(anglex)), 0, ],
+                    [0, 0, 0, 1]], np.float32)
+    
+        ry = np.array([[np.cos(rad(angley)), 0, np.sin(rad(angley)), 0],
+                    [0, 1, 0, 0],
+                    [-np.sin(rad(angley)), 0, np.cos(rad(angley)), 0, ],
+                    [0, 0, 0, 1]], np.float32)
+    
+        rz = np.array([[np.cos(rad(anglez)), np.sin(rad(anglez)), 0, 0],
+                    [-np.sin(rad(anglez)), np.cos(rad(anglez)), 0, 0],
+                    [0, 0, 1, 0],
+                    [0, 0, 0, 1]], np.float32)
+    
+        r = rx.dot(ry).dot(rz)
+    
+        # 四对点的生成
+        pcenter = np.array([w / 2, h / 2, 0, 0], np.float32)
+    
+        p1 = np.array([0, 0, 0, 0], np.float32) - pcenter
+        p2 = np.array([w, 0, 0, 0], np.float32) - pcenter
+        p3 = np.array([0, h, 0, 0], np.float32) - pcenter
+        p4 = np.array([w, h, 0, 0], np.float32) - pcenter
+    
+        dst1 = r.dot(p1)
+        dst2 = r.dot(p2)
+        dst3 = r.dot(p3)
+        dst4 = r.dot(p4)
+    
+        list_dst = [dst1, dst2, dst3, dst4]
+    
+        org = np.array([[0, 0],
+                        [w, 0],
+                        [0, h],
+                        [w, h]], np.float32)
+        org_ = np.array([[0, 0, 1],
+                        [h, 0, 1],
+                        [0, w, 1],
+                        [h, w, 1]], np.float32)
+        dst = np.zeros((4, 2), np.float32)
+    
+        # 投影至成像平面
+        for i in range(4):
+            dst[i, 0] = list_dst[i][0] * z / (z - list_dst[i][2]) + pcenter[0]
+            dst[i, 1] = list_dst[i][1] * z / (z - list_dst[i][2]) + pcenter[1]
+    
+        warpR = cv2.getPerspectiveTransform(org, dst)
+        new_shape = (int(dst[:, 0].max() - dst[:, 0].min()), int(dst[:, 1].max() - dst[:, 1].min()))
+        offset = (int(dst[:, 0].min()), int(dst[:, 1].min()))
+        warpR[0, :] -=  warpR[2, :]*offset[0]
+        warpR[1, :] -=  warpR[2, :]*offset[1]
+        return warpR, new_shape
+
+class MarginCropTransform(Transform):
+    def __init__(self):
+        super().__init__()
+        self._set_attributes(locals())
+        self.aug_with_box = True
+
+    def apply_image(self, img, boxes):
+        assert boxes.shape[-1] == 2
+        w, h = img.shape[1], img.shape[0]
+        min_x = boxes[:, 0].min()
+        max_x = boxes[:, 0].max()
+        min_y = boxes[:, 1].min()
+        max_y = boxes[:, 1].max()
+        self.crop_left = int(np.random.uniform(min_x/4, 3*min_x/4))
+        self.crop_top = int(np.random.uniform(min_y/4, 3*min_y/4))
+        self.crop_right = int(np.random.uniform(max_x + (w-1-max_x)//4, max_x + 3*(w-1-max_x)//4))
+        self.crop_bottom= int(np.random.uniform(max_y + (h-1-max_y)//4, max_y + 3*(h-1-max_y)//4))
+        img = img[self.crop_top:self.crop_bottom, self.crop_left:self.crop_right, :]
+        return img
+
+    def apply_coords(self, coords):
+        coords = coords-np.array([self.crop_left, self.crop_top])
+        return coords
+    
+    def apply_box(self, boxes):
+        raise NotImplementedError
 
 class ColorTransform(Transform):
     """

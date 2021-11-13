@@ -281,11 +281,24 @@ def transform_instance_annotations(
     if isinstance(transforms, (tuple, list)):
         transforms = T.TransformList(transforms)
     # bbox is 1d (per-instance bounding box)
-    bbox = BoxMode.convert(annotation["bbox"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
+    if "poly" in annotation: 
+        poly_points = np.array(annotation["poly"])
+        poly_points = transforms.apply_coords(np.array([poly_points]))[0].clip(min=0) 
+        bbox = np.concatenate([poly_points[:, :1].min(0, keepdims=True), poly_points[:, 1:].min(0, keepdims=True), \
+        poly_points[:, :1].max(0, keepdims=True), poly_points[:, 1:].max(0, keepdims=True)], 1).squeeze(0)
+        annotation["bbox"] = bbox.clip(min=0) 
+        try:
+            annotation["poly"] = poly_points.reshape(8)
+        except:
+            raise RuntimeError("Current shape is {}".format(poly_points.shape))
+    else:
+        bbox = BoxMode.convert(annotation["bbox"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
+        bbox = transforms.apply_box(np.array([bbox]))[0].clip(min=0) 
+       
+    
     # clip transformed bbox to image size
-    bbox = transforms.apply_box(np.array([bbox]))[0].clip(min=0)
-    annotation["bbox"] = np.minimum(bbox, list(image_size + image_size)[::-1])
     annotation["bbox_mode"] = BoxMode.XYXY_ABS
+    annotation["bbox"] = np.minimum(bbox, list(image_size + image_size)[::-1])
 
     if "segmentation" in annotation:
         # each instance contains 1 or more polygons
@@ -382,6 +395,7 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
             "gt_masks", "gt_keypoints", if they can be obtained from `annos`.
             This is the format that builtin models expect.
     """
+    
     boxes = (
         np.stack(
             [BoxMode.convert(obj["bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
@@ -389,9 +403,16 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
         if len(annos)
         else np.zeros((0, 4))
     )
+    coords = (
+        np.stack(
+            [obj["poly"] for obj in annos]
+        )
+        if len(annos) and "poly" in annos[0]
+        else np.zeros((0, 8))
+    )
     target = Instances(image_size)
     target.gt_boxes = Boxes(boxes)
-
+    target.set("gt_coords", torch.Tensor(coords))
     classes = [int(obj["category_id"]) for obj in annos]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes

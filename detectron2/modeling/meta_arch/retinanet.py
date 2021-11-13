@@ -14,7 +14,7 @@ from detectron2.utils.events import get_event_storage
 
 from ..anchor_generator import build_anchor_generator
 from ..backbone import Backbone, build_backbone
-from ..box_regression import Box2BoxTransform, _dense_box_regression_loss
+from ..box_regression import Box2BoxTransform, _dense_box_regression_loss, min_dense_box_regression_loss, Box2PointTransform
 from ..matcher import Matcher
 from .build import META_ARCH_REGISTRY
 from .dense_detector import DenseDetector, permute_to_N_HWA_K  # noqa
@@ -123,7 +123,7 @@ class RetinaNet(DenseDetector):
             "backbone": backbone,
             "head": head,
             "anchor_generator": anchor_generator,
-            "box2box_transform": Box2BoxTransform(weights=cfg.MODEL.RETINANET.BBOX_REG_WEIGHTS),
+            "box2box_transform": Box2PointTransform(weights=cfg.MODEL.RETINANET.BBOX_REG_WEIGHTS),
             "anchor_matcher": Matcher(
                 cfg.MODEL.RETINANET.IOU_THRESHOLDS,
                 cfg.MODEL.RETINANET.IOU_LABELS,
@@ -151,7 +151,7 @@ class RetinaNet(DenseDetector):
     def forward_training(self, images, features, predictions, gt_instances):
         # Transpose the Hi*Wi*A dimension to the middle:
         pred_logits, pred_anchor_deltas = self._transpose_dense_predictions(
-            predictions, [self.num_classes, 4]
+            predictions, [self.num_classes, 8] ##lili [[layers]batches]
         )
         anchors = self.anchor_generator(features)
         gt_labels, gt_boxes = self.label_anchors(anchors, gt_instances)
@@ -193,8 +193,7 @@ class RetinaNet(DenseDetector):
             gamma=self.focal_loss_gamma,
             reduction="sum",
         )
-
-        loss_box_reg = _dense_box_regression_loss(
+        loss_box_reg = min_dense_box_regression_loss(
             anchors,
             self.box2box_transform,
             pred_anchor_deltas,
@@ -203,7 +202,6 @@ class RetinaNet(DenseDetector):
             box_reg_loss_type=self.box_reg_loss_type,
             smooth_l1_beta=self.smooth_l1_beta,
         )
-
         return {
             "loss_cls": loss_cls / normalizer,
             "loss_box_reg": loss_box_reg / normalizer,
@@ -232,13 +230,13 @@ class RetinaNet(DenseDetector):
 
         gt_labels = []
         matched_gt_boxes = []
-        for gt_per_image in gt_instances:
+        for gt_per_image in gt_instances:## a batch of imgs
             match_quality_matrix = pairwise_iou(gt_per_image.gt_boxes, anchors)
             matched_idxs, anchor_labels = self.anchor_matcher(match_quality_matrix)
             del match_quality_matrix
 
             if len(gt_per_image) > 0:
-                matched_gt_boxes_i = gt_per_image.gt_boxes.tensor[matched_idxs]
+                matched_gt_boxes_i = gt_per_image.gt_coords[matched_idxs]
 
                 gt_labels_i = gt_per_image.gt_classes[matched_idxs]
                 # Anchors with label 0 are treated as background.
@@ -246,7 +244,7 @@ class RetinaNet(DenseDetector):
                 # Anchors with label -1 are ignored.
                 gt_labels_i[anchor_labels == -1] = -1
             else:
-                matched_gt_boxes_i = torch.zeros_like(anchors.tensor)
+                matched_gt_boxes_i = torch.zeros_like(anchors.tensor.repeat(1, 2))##lili
                 gt_labels_i = torch.zeros_like(matched_idxs) + self.num_classes
 
             gt_labels.append(gt_labels_i)
@@ -383,7 +381,7 @@ class RetinaNetHead(nn.Module):
             conv_dims[-1], num_anchors * num_classes, kernel_size=3, stride=1, padding=1
         )
         self.bbox_pred = nn.Conv2d(
-            conv_dims[-1], num_anchors * 4, kernel_size=3, stride=1, padding=1
+            conv_dims[-1], num_anchors * 8, kernel_size=3, stride=1, padding=1
         )
 
         # Initialization

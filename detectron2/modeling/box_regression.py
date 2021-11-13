@@ -115,6 +115,74 @@ class Box2BoxTransform(object):
         pred_boxes = torch.stack((x1, y1, x2, y2), dim=-1)
         return pred_boxes.reshape(deltas.shape)
 
+@torch.jit.script
+class Box2PointTransform(object):
+    """
+    The box-to-box transform defined in R-CNN. The transformation is parameterized
+    by 4 deltas: (dx, dy, dw, dh). The transformation scales the box's width and height
+    by exp(dw), exp(dh) and shifts a box's center by the offset (dx * width, dy * height).
+    """
+
+    def __init__(
+        self, weights: Tuple[float, float, float, float], scale_clamp: float = _DEFAULT_SCALE_CLAMP
+    ):
+        """
+        Args:
+            weights (4-element tuple): Scaling factors that are applied to the
+                (dx, dy, dw, dh) deltas. In Fast R-CNN, these were originally set
+                such that the deltas have unit variance; now they are treated as
+                hyperparameters of the system.
+            scale_clamp (float): When predicting deltas, the predicted box scaling
+                factors (dw and dh) are clamped such that they are <= scale_clamp.
+        """
+        self.weights = weights
+        self.scale_clamp = scale_clamp
+
+    def get_deltas(self, predict_boxes, target_boxes, anchor_boxes):
+        """
+        Get box regression transformation deltas (dx, dy, dw, dh) that can be used
+        to transform the `src_boxes` into the `target_boxes`. That is, the relation
+        ``target_boxes == self.apply_deltas(deltas, src_boxes)`` is true (unless
+        any delta is too large and is clamped).
+
+        Args:
+            src_boxes (Tensor): source boxes, e.g., object proposals
+            target_boxes (Tensor): target of the transformation, e.g., ground-truth
+                boxes.
+        """
+        assert isinstance(predict_boxes, torch.Tensor), type(predict_boxes)
+        assert isinstance(target_boxes, torch.Tensor), type(target_boxes)
+        anchor_widths = anchor_boxes[:, 2:3] - anchor_boxes[:, :1]
+        anchor_heights = anchor_boxes[:, 3:] - anchor_boxes[:, 1:2]
+
+        deltas = predict_boxes - target_boxes
+        deltas[:, :, ::2] /= anchor_widths
+        deltas[:, :, 1::2] /= anchor_heights
+        return deltas
+
+    def apply_deltas(self, deltas, boxes):
+        """
+        Apply transformation `deltas` (dx, dy, dw, dh) to `boxes`.
+
+        Args:
+            deltas (Tensor): transformation deltas of shape (N, k*4), where k >= 1.
+                deltas[i] represents k potentially different class-specific
+                box transformations for the single box boxes[i].
+            boxes (Tensor): boxes to transform, of shape (N, 4)
+        """
+        deltas = deltas.float()  # ensure fp32 for decoding precision
+        boxes = boxes.to(deltas.dtype)
+
+        widths = boxes[:, 2:3] - boxes[:, :1]
+        heights = boxes[:, 3:] - boxes[:, 1:2]
+        points_index = torch.as_tensor([0, 1, 2, 1, 2, 3, 0, 3]).long().to(boxes.device)
+        anchor_points = boxes[:, points_index]
+        offset_points = deltas.clone()
+        offset_points[:, :, ::2] *= widths
+        offset_points[:, :, 1::2] *= heights
+        pred_boxes = anchor_points + offset_points
+        del points_index
+        return pred_boxes
 
 @torch.jit.script
 class Box2BoxTransformRotated(object):
@@ -306,6 +374,36 @@ class Box2BoxTransformLinear(object):
         pred_boxes[:, 3::4] = ctr_y[:, None] + b  # y2
         return pred_boxes
 
+def min_dense_box_regression_loss(
+    anchors: List[Union[Boxes, torch.Tensor]],
+    box2box_transform: Box2BoxTransform,
+    pred_anchor_deltas: List[torch.Tensor],
+    gt_boxes: List[torch.Tensor],
+    fg_mask: torch.Tensor,
+    box_reg_loss_type="smooth_l1",
+    smooth_l1_beta=0.0,
+):
+    gt_boxes = cat([gt_box.unsqueeze(0) for gt_box in gt_boxes])
+    anchors = Boxes.cat(anchors).tensor
+    pred_anchor_deltas = cat(pred_anchor_deltas, 1)
+    if box_reg_loss_type == "smooth_l1":
+        pred_boxes = box2box_transform.apply_deltas(pred_anchor_deltas, anchors)
+        reg_loss_list = []
+        for num in range(4):
+            gt_boxes = torch.roll(gt_boxes, 2, -1)
+            deltas = box2box_transform.get_deltas(pred_boxes, gt_boxes, anchors)
+            target = torch.zeros_like(deltas)
+            loss_box_reg = smooth_l1_loss(
+                deltas[fg_mask],
+                target[fg_mask],
+                beta=smooth_l1_beta,
+                reduction="none",
+            )
+            reg_loss_list.append(loss_box_reg.sum(-1, keepdims=True))
+        loss_box_reg = cat(reg_loss_list, 1)
+        loss_box_reg = loss_box_reg.min(1)[0].sum()
+        del reg_loss_list
+    return loss_box_reg
 
 def _dense_box_regression_loss(
     anchors: List[Union[Boxes, torch.Tensor]],
@@ -335,11 +433,14 @@ def _dense_box_regression_loss(
     else:
         anchors = cat(anchors)
     if box_reg_loss_type == "smooth_l1":
-        gt_anchor_deltas = [box2box_transform.get_deltas(anchors, k) for k in gt_boxes]
-        gt_anchor_deltas = torch.stack(gt_anchor_deltas)  # (N, R, 4)
+        # gt_anchor_deltas = [box2box_transform.get_deltas(anchors, k) for k in gt_boxes]
+        pred_boxes = cat([box2box_transform.apply_deltas(j, k) for j, k in zip(pred_anchor_deltas, anchors)], dim=1)
+        # gt_anchor_deltas = torch.stack(gt_anchor_deltas)  # (N, R, 4)
+        deltas = box2box_transform.get_deltas(pred_boxes, gt_boxes)
+        target = torch.zeros_like(deltas)
         loss_box_reg = smooth_l1_loss(
-            cat(pred_anchor_deltas, dim=1)[fg_mask],
-            gt_anchor_deltas[fg_mask],
+            deltas[fg_mask],
+            target[fg_mask],
             beta=smooth_l1_beta,
             reduction="sum",
         )

@@ -153,14 +153,13 @@ class DatasetMapper:
         # USER: Write your own image loading if it's not from a file
         image = utils.read_image(dataset_dict["file_name"], format=self.image_format)
         utils.check_image_size(dataset_dict, image)
-
+        coords = np.array([item.get("poly", 0) for item in dataset_dict["annotations"]]).reshape(-1, 2)
         # USER: Remove if you don't do semantic/panoptic segmentation.
         if "sem_seg_file_name" in dataset_dict:
             sem_seg_gt = utils.read_image(dataset_dict.pop("sem_seg_file_name"), "L").squeeze(2)
         else:
             sem_seg_gt = None
-
-        aug_input = T.AugInput(image, sem_seg=sem_seg_gt)
+        aug_input = T.AugInput(image, coords=coords, sem_seg=sem_seg_gt)
         transforms = self.augmentations(aug_input)
         image, sem_seg_gt = aug_input.image, aug_input.sem_seg
 
