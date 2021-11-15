@@ -283,7 +283,7 @@ def transform_instance_annotations(
     # bbox is 1d (per-instance bounding box)
     if "poly" in annotation: 
         poly_points = np.array(annotation["poly"])
-        poly_points = transforms.apply_coords(np.array([poly_points]))[0].clip(min=0) 
+        poly_points = transforms.apply_coords(poly_points).clip(min=0)
         bbox = np.concatenate([poly_points[:, :1].min(0, keepdims=True), poly_points[:, 1:].min(0, keepdims=True), \
         poly_points[:, :1].max(0, keepdims=True), poly_points[:, 1:].max(0, keepdims=True)], 1).squeeze(0)
         annotation["bbox"] = bbox.clip(min=0) 

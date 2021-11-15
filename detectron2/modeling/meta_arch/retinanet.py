@@ -256,7 +256,7 @@ class RetinaNet(DenseDetector):
         self, images: ImageList, features: List[Tensor], predictions: List[List[Tensor]]
     ):
         pred_logits, pred_anchor_deltas = self._transpose_dense_predictions(
-            predictions, [self.num_classes, 4]
+            predictions, [self.num_classes, 8]
         )
         anchors = self.anchor_generator(features)
 

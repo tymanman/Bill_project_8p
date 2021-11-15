@@ -154,7 +154,6 @@ class Box2PointTransform(object):
         assert isinstance(target_boxes, torch.Tensor), type(target_boxes)
         anchor_widths = anchor_boxes[:, 2:3] - anchor_boxes[:, :1]
         anchor_heights = anchor_boxes[:, 3:] - anchor_boxes[:, 1:2]
-
         deltas = predict_boxes - target_boxes
         deltas[:, :, ::2] /= anchor_widths
         deltas[:, :, 1::2] /= anchor_heights
@@ -172,14 +171,17 @@ class Box2PointTransform(object):
         """
         deltas = deltas.float()  # ensure fp32 for decoding precision
         boxes = boxes.to(deltas.dtype)
-
         widths = boxes[:, 2:3] - boxes[:, :1]
         heights = boxes[:, 3:] - boxes[:, 1:2]
         points_index = torch.as_tensor([0, 1, 2, 1, 2, 3, 0, 3]).long().to(boxes.device)
         anchor_points = boxes[:, points_index]
         offset_points = deltas.clone()
-        offset_points[:, :, ::2] *= widths
-        offset_points[:, :, 1::2] *= heights
+        if len(deltas.shape)==2:
+            offset_points[:, ::2] *= widths
+            offset_points[:, 1::2] *= heights
+        else:
+            offset_points[:, :, ::2] *= widths
+            offset_points[:, :, 1::2] *= heights
         pred_boxes = anchor_points + offset_points
         del points_index
         return pred_boxes

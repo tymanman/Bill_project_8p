@@ -213,14 +213,19 @@ class DenseDetector(nn.Module):
         pred_scores, idxs = pred_scores.sort(descending=True)
         pred_scores = pred_scores[:num_topk]
         topk_idxs = topk_idxs[idxs[:num_topk]]
-
+        
         anchor_idxs, classes_idxs = topk_idxs.unbind(dim=1)
-
-        pred_boxes = self.box2box_transform.apply_deltas(
+        pred_points = self.box2box_transform.apply_deltas(
             pred_deltas[anchor_idxs], anchors.tensor[anchor_idxs]
         )
+        pred_boxes = torch.cat([pred_points[:,::2].min(1, keepdims=True)[0],
+                               pred_points[:,1::2].min(1, keepdims=True)[0],
+                               pred_points[:,::2].max(1, keepdims=True)[0],
+                               pred_points[:,1::2].max(1, keepdims=True)[0]],
+                               1
+                                )
         return Instances(
-            image_size, pred_boxes=Boxes(pred_boxes), scores=pred_scores, pred_classes=classes_idxs
+            image_size, pred_boxes=Boxes(pred_boxes), pred_points=pred_points, scores=pred_scores, pred_classes=classes_idxs
         )
 
     def _decode_multi_level_predictions(

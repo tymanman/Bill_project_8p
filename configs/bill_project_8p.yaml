@@ -18,9 +18,9 @@ DATASETS:
   TRAIN: ("bill_card_train",)
   TEST: ("bill_card_val",)
 SOLVER:
-  IMS_PER_BATCH: 16
+  IMS_PER_BATCH: 32
   BASE_LR: 0.01  # Note that RetinaNet uses a different default learning rate
-  STEPS: (3000, 5000)
+  STEPS: (2000, 4000)
   MAX_ITER: 6000
   CHECKPOINT_PERIOD: 500
 INPUT:

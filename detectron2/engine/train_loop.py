@@ -333,6 +333,15 @@ class SimpleTrainer(TrainerBase):
             metrics_dict = {
                 k: np.mean([x[k] for x in all_metrics_dict]) for k in all_metrics_dict[0].keys()
             }
+            infinite_list = []
+            for key, value in metrics_dict.items():
+                if not np.isfinite(value):
+                    infinite_list.append(key)
+            if len(infinite_list):
+                raise FloatingPointError(
+                    f"Loss became infinite or NaN at iteration={storage.iter}!\n"
+                    f"loss_dict = {str(infinite_list)}"
+                )  
             total_losses_reduced = sum(metrics_dict.values())
             if not np.isfinite(total_losses_reduced):
                 raise FloatingPointError(

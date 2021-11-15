@@ -338,8 +338,6 @@ class AugInput:
             self.image = tfm.apply_image(self.image, self.coords)
         else:
             self.image = tfm.apply_image(self.image)
-        if self.coords is not None:
-            self.coords = tfm.apply_coords(self.coords)
         if self.boxes is not None:
             self.boxes = tfm.apply_box(self.boxes)
         if self.sem_seg is not None:
