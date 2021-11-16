@@ -37,6 +37,8 @@ __all__ = [
     "ResizeScale",
     "ResizeShortestEdge",
     "RandomCrop_CategoryAreaConstraint",
+    "RandomRotation3D",
+    "RandomMarginCrop",
 ]
 
 
@@ -636,4 +638,5 @@ class RandomRotation3D(Augmentation):
         self._init(locals())
 
     def get_transform(self, image):
-        return Rotation3DTransform()    
+        h, w = image.shape[:2]
+        return Rotation3DTransform(h, w)    

@@ -252,7 +252,7 @@ class Rotation3DTransform(Transform):
     number of degrees counter clockwise around its center.
     """
 
-    def __init__(self, anglex_vari=20, angley_vari=20, anglez_vari=150, fov=42):
+    def __init__(self, h, w, anglex_vari=20, angley_vari=20, anglez_vari=150, fov=42):
         """
         Args:
             h, w (int): original image size
@@ -270,7 +270,7 @@ class Rotation3DTransform(Transform):
         self.angley_vari = angley_vari
         self.anglez_vari = anglez_vari
         self.fov = fov
-        self.warpR, self.new_shape = self.get_warpR()
+        self.warpR, self.new_shape = self.get_warpR(h, w)
 
     def apply_image(self, img):
         """
@@ -296,10 +296,9 @@ class Rotation3DTransform(Transform):
     def apply_box(self, box):
         raise NotImplementedError
 
-    def get_warpR(self, img):
+    def get_warpR(self, h, w):
         def rad(x):
             return x * np.pi / 180
-        h, w = img.shape[0:2]
         
         anglex = np.random.uniform(-self.anglex_vari, self.anglex_vari)
         angley = np.random.uniform(-self.angley_vari, self.angley_vari)
@@ -343,10 +342,6 @@ class Rotation3DTransform(Transform):
                         [w, 0],
                         [0, h],
                         [w, h]], np.float32)
-        org_ = np.array([[0, 0, 1],
-                        [h, 0, 1],
-                        [0, w, 1],
-                        [h, w, 1]], np.float32)
         dst = np.zeros((4, 2), np.float32)
     
         # 投影至成像平面

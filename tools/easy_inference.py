@@ -17,6 +17,7 @@ from detectron2.utils.logger import setup_logger
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.modeling import build_model
 import detectron2.data.transforms as T
+from rectify_roi import *
 # constants
 WINDOW_NAME = "COCO detections"
 
@@ -47,6 +48,7 @@ def get_parser():
     )
     parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
     parser.add_argument("--video-input", help="Path to video file.")
+    parser.add_argument("--root")
     parser.add_argument(
         "--input",
         nargs="+",
@@ -62,7 +64,7 @@ def get_parser():
     parser.add_argument(
         "--confidence-threshold",
         type=float,
-        default=0.5,
+        default=0.8,
         help="Minimum score for instance predictions to be shown",
     )
     parser.add_argument(
@@ -83,8 +85,9 @@ if __name__ == "__main__":
     logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
-    root = "datasets/bill_card_data/train/imgs"
+    root = args.root
     res_dir = "demo_out"
+    rectify = True
     model = build_model(cfg)
     model.eval()
     checkpointer = DetectionCheckpointer(model)
@@ -100,11 +103,18 @@ if __name__ == "__main__":
         img = torch.as_tensor(img.astype("float32").transpose(2, 0, 1))
         inputs = {"image": img, "height": height, "width": width}
         predictions = model([inputs])[0]["instances"]
+        print(predictions.scores.cpu().detach().numpy().tolist())
         points = predictions.pred_points.cpu().detach().numpy()
+        points = points.reshape(-1, 4, 2).astype( np.int32 )
         ori_img = ori_img.astype(np.uint8)
-        cv2.polylines(ori_img, points.reshape(-1, 4, 2).astype( np.int32 ), True, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA )
         filename = path.split( "/" )[-1]
+        if rectify:
+            rois_ = [project_rectify(ori_img, point) for point in points]
+        cv2.polylines(ori_img, points, True, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA )
+        [cv2.putText(ori_img, "score: "+str(score), tuple(points[i][0].tolist()), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2) for i, score in enumerate(predictions.scores.cpu().detach().numpy().tolist())]
         cv2.imwrite( "{}/{}".format( res_dir, filename ), ori_img )
+        for ind, roi in enumerate(rois_):
+            cv2.imwrite( "{}/{}".format( res_dir, f"Inst_{ind}_" + filename ), roi )
         print("Done!")
     #     if args.output:
     #         if os.path.isdir(args.output):

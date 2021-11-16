@@ -10,6 +10,8 @@ playground
 *.jpg
 !/projects/DensePose/doc/images/*.jpg
 demo_out
+test
+*imgs/
 # compilation and distribution
 __pycache__
 _ext

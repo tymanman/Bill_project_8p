@@ -55,7 +55,9 @@ def detector_postprocess(
 
     output_boxes.scale(scale_x, scale_y)
     output_boxes.clip(results.image_size)
-
+    if results.has("pred_points"):
+        results.pred_points[:, ::2] *= scale_x
+        results.pred_points[:, 1::2] *= scale_y
     results = results[output_boxes.nonempty()]
 
     if results.has("pred_masks"):

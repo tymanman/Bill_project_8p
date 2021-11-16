@@ -627,7 +627,7 @@ def build_augmentation(cfg, is_train):
         min_size = cfg.INPUT.MIN_SIZE_TEST
         max_size = cfg.INPUT.MAX_SIZE_TEST
         sample_style = "choice"
-    augmentation = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
+    augmentation = []
     if is_train and cfg.INPUT.RANDOM_FLIP != "none":
         augmentation.append(
             T.RandomFlip(
@@ -635,6 +635,15 @@ def build_augmentation(cfg, is_train):
                 vertical=cfg.INPUT.RANDOM_FLIP == "vertical",
             )
         )
+    if is_train and cfg.INPUT.RANDOM_COLOR_JITTER.ENABLED:
+        augmentation.extend([T.RandomContrast(0.8, 1.2),
+                             T.RandomBrightness(0.8, 1.2),
+                             T.RandomSaturation(0.8, 1.2)])
+    if is_train and cfg.INPUT.RANDOM_ROTATION_3D.ENABLED:
+        augmentation.append(T.RandomRotation3D())
+    if is_train and cfg.INPUT.RANDOM_Margin_CROP.ENABLED:
+        augmentation.append(T.RandomMarginCrop())
+    augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     return augmentation
 
 
