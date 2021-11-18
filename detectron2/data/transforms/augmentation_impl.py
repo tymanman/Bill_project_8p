@@ -5,6 +5,7 @@ Implement many useful :class:`Augmentation`.
 """
 import numpy as np
 import sys
+import os
 from typing import Tuple
 import torch
 from fvcore.transforms.transform import (
@@ -20,8 +21,8 @@ from fvcore.transforms.transform import (
 from PIL import Image
 
 from .augmentation import Augmentation, _transform_to_aug
-from .transform import ExtentTransform, ResizeTransform, RotationTransform, Rotation3DTransform, MarginCropTransform
-
+from .transform import ExtentTransform, ResizeTransform, RotationTransform, Rotation3DTransform, MarginCropTransform, Copy_paste_Transform
+np.random.seed(0) ## fix the aug seed.
 __all__ = [
     "FixedSizeCrop",
     "RandomApply",
@@ -39,6 +40,7 @@ __all__ = [
     "RandomCrop_CategoryAreaConstraint",
     "RandomRotation3D",
     "RandomMarginCrop",
+    "Random_Copy_paste",
 ]
 
 
@@ -419,12 +421,17 @@ class RandomMarginCrop(Augmentation):
     Randomly crop a rectangle region out of an image.
     """
 
-    def __init__(self):
+    def __init__(self, prob=0.8):
         super().__init__()
         self._init(locals())
 
     def get_transform(self, image):
-        return MarginCropTransform()
+        do = self._rand_range()
+        if do<self.prob:
+            crop_scale = np.random.uniform(0.25, 0.75)
+            return MarginCropTransform(crop_scale)
+        else:
+            return NoOpTransform()
 
 
 class RandomCrop_CategoryAreaConstraint(Augmentation):
@@ -633,10 +640,37 @@ class RandomRotation3D(Augmentation):
     number of degrees counter clockwise around the given center.
     """
 
-    def __init__(self):
+    def __init__(self, prob=0.8, anglex_vari=20, angley_vari=20, anglez_vari=150, fov=42):
         super().__init__()
         self._init(locals())
 
     def get_transform(self, image):
         h, w = image.shape[:2]
-        return Rotation3DTransform(h, w)    
+        do = self._rand_range()
+        if do<self.prob:
+            anglex = np.random.uniform(-self.anglex_vari, self.anglex_vari)
+            angley = np.random.uniform(-self.angley_vari, self.angley_vari)
+            anglez = np.random.uniform(-self.anglez_vari, self.anglez_vari)
+            return Rotation3DTransform(h, w, anglex, angley, anglez, self.fov)    
+        else:
+            return NoOpTransform()
+
+class Random_Copy_paste(Augmentation):
+    """
+    This method returns a copy of this image, rotated the given
+    number of degrees counter clockwise around the given center.
+    """
+
+    def __init__(self, prob=0.3, need_num_boxes=True, background_dir="../dataset/coco/val2017/"):
+        super().__init__()
+        self._init(locals())
+        self.background_list = os.listdir(background_dir)
+
+    def get_transform(self, image):
+        h, w = image.shape[:2]
+        do = self._rand_range()
+        if do<self.prob:
+            det_img_path = os.path.join(self.background_dir, self.background_list[np.random.randint(len(self.background_list))])
+            return Copy_paste_Transform(det_img_path)
+        else:
+            return NoOpTransform()

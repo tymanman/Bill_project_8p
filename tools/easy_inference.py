@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     cfg = setup_cfg(args)
     root = args.root
-    res_dir = "demo_out"
+    res_dir = "demo_out_ori"
     rectify = True
     model = build_model(cfg)
     model.eval()
@@ -103,9 +103,9 @@ if __name__ == "__main__":
         img = torch.as_tensor(img.astype("float32").transpose(2, 0, 1))
         inputs = {"image": img, "height": height, "width": width}
         predictions = model([inputs])[0]["instances"]
-        print(predictions.scores.cpu().detach().numpy().tolist())
         points = predictions.pred_points.cpu().detach().numpy()
         points = points.reshape(-1, 4, 2).astype( np.int32 )
+        print(path, points)
         ori_img = ori_img.astype(np.uint8)
         filename = path.split( "/" )[-1]
         if rectify:

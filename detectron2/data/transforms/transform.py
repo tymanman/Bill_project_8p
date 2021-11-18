@@ -28,8 +28,11 @@ __all__ = [
     "ExtentTransform",
     "ResizeTransform",
     "RotationTransform",
+    "Rotation3DTransform",
     "ColorTransform",
     "PILColorTransform",
+    "MarginCropTransform",
+    "Copy_paste_Transform",
 ]
 
 
@@ -252,7 +255,7 @@ class Rotation3DTransform(Transform):
     number of degrees counter clockwise around its center.
     """
 
-    def __init__(self, h, w, anglex_vari=20, angley_vari=20, anglez_vari=150, fov=42):
+    def __init__(self, h, w, anglex, angley, anglez, fov):
         """
         Args:
             h, w (int): original image size
@@ -266,11 +269,7 @@ class Rotation3DTransform(Transform):
         """
         super().__init__()
         self._set_attributes(locals())
-        self.anglex_vari = anglex_vari
-        self.angley_vari = angley_vari
-        self.anglez_vari = anglez_vari
-        self.fov = fov
-        self.warpR, self.new_shape = self.get_warpR(h, w)
+        self.warpR, self.new_shape = self.get_warpR(h, w, anglex, angley, anglez, fov)
 
     def apply_image(self, img):
         """
@@ -296,15 +295,12 @@ class Rotation3DTransform(Transform):
     def apply_box(self, box):
         raise NotImplementedError
 
-    def get_warpR(self, h, w):
+    def get_warpR(self, h, w, anglex, angley, anglez, fov):
         def rad(x):
             return x * np.pi / 180
         
-        anglex = np.random.uniform(-self.anglex_vari, self.anglex_vari)
-        angley = np.random.uniform(-self.angley_vari, self.angley_vari)
-        anglez = np.random.uniform(-self.anglez_vari, self.anglez_vari)
         # 镜头与图像间的距离，21为半可视角，算z的距离是为了保证在此可视角度下恰好显示整幅图像
-        z = np.sqrt(w ** 2 + h ** 2) / 2 / np.tan(rad(self.fov / 2))
+        z = np.sqrt(w ** 2 + h ** 2) / 2 / np.tan(rad(fov / 2))
         # 齐次变换矩阵
         rx = np.array([[1, 0, 0, 0],
                     [0, np.cos(rad(anglex)), -np.sin(rad(anglex)), 0],
@@ -357,10 +353,9 @@ class Rotation3DTransform(Transform):
         return warpR, new_shape
 
 class MarginCropTransform(Transform):
-    def __init__(self):
+    def __init__(self, crop_scale, aug_with_box=True):
         super().__init__()
         self._set_attributes(locals())
-        self.aug_with_box = True
 
     def apply_image(self, img, boxes):
         assert boxes.shape[-1] == 2
@@ -369,10 +364,10 @@ class MarginCropTransform(Transform):
         max_x = boxes[:, 0].max()
         min_y = boxes[:, 1].min()
         max_y = boxes[:, 1].max()
-        self.crop_left = int(np.random.uniform(min_x/4, 3*min_x/4))
-        self.crop_top = int(np.random.uniform(min_y/4, 3*min_y/4))
-        self.crop_right = int(np.random.uniform(max_x + (w-1-max_x)//4, max_x + 3*(w-1-max_x)//4))
-        self.crop_bottom= int(np.random.uniform(max_y + (h-1-max_y)//4, max_y + 3*(h-1-max_y)//4))
+        self.crop_left = int(min_x * self.crop_scale)
+        self.crop_top = int(min_y * self.crop_scale)
+        self.crop_right = int(max_x + (w-1-max_x) * self.crop_scale)
+        self.crop_bottom= int(max_y + (h-1-max_y) * self.crop_scale)
         img = img[self.crop_top:self.crop_bottom, self.crop_left:self.crop_right, :]
         return img
 
@@ -478,6 +473,36 @@ def Resize_rotated_box(transform, rotated_boxes):
     rotated_boxes[:, 4] = np.arctan2(scale_factor_x * s, scale_factor_y * c) * 180 / np.pi
 
     return rotated_boxes
+
+class Copy_paste_Transform(Transform):
+    def __init__(self, det_img_path, aug_with_box=True):
+        super().__init__()
+        self._set_attributes(locals())
+        self.counter = 0
+
+    def apply_image(self, src_img, boxes):
+        assert boxes.shape[-1] == 2
+        num_boxes = boxes.shape[0]//4
+        self.paste_roi_index = set(np.random.choice(num_boxes, num_boxes,replace=True).tolist())
+        roi_boxes = [boxes[index*4:(index+1)*4].astype(np.int64) for index in self.paste_roi_index]
+        w, h = src_img.shape[1], src_img.shape[0]
+        det_img = cv2.imread(self.det_img_path)
+        det_img = cv2.resize(det_img, (w, h))
+        roi_mask = np.zeros((h, w, 3)).astype(np.uint8)
+        cv2.fillPoly(roi_mask, roi_boxes, (1, 1, 1))
+        det_img = cv2.resize(det_img, (src_img.shape[1], src_img.shape[0]))
+        aug_img = np.where(roi_mask, src_img, det_img).astype(np.uint8)
+        return aug_img
+
+    def apply_coords(self, coords):
+        if self.counter in self.paste_roi_index:
+            return coords
+        else:
+            return np.zeros((4, 2))
+        self.counter += 1
+    
+    def apply_box(self, boxes):
+        raise NotImplementedError
 
 
 HFlipTransform.register_type("rotated_box", HFlip_rotated_box)

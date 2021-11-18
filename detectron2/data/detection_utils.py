@@ -210,6 +210,8 @@ def check_image_size(dataset_dict, image):
     if "height" not in dataset_dict:
         dataset_dict["height"] = image.shape[0]
 
+def check_box_valid(box):
+    return False if (box[3]- box[1])*(box[2]- box[0])< 10 else True
 
 def transform_proposals(dataset_dict, image_shape, transforms, *, proposal_topk, min_box_size=0):
     """
@@ -395,7 +397,7 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
             "gt_masks", "gt_keypoints", if they can be obtained from `annos`.
             This is the format that builtin models expect.
     """
-    
+    annos = [obj for obj in annos if check_box_valid(obj["bbox"])]
     boxes = (
         np.stack(
             [BoxMode.convert(obj["bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
@@ -640,9 +642,11 @@ def build_augmentation(cfg, is_train):
                              T.RandomBrightness(0.8, 1.2),
                              T.RandomSaturation(0.8, 1.2)])
     if is_train and cfg.INPUT.RANDOM_ROTATION_3D.ENABLED:
-        augmentation.append(T.RandomRotation3D())
+        augmentation.append(T.RandomRotation3D(prob=0.8))
     if is_train and cfg.INPUT.RANDOM_Margin_CROP.ENABLED:
-        augmentation.append(T.RandomMarginCrop())
+        augmentation.append(T.RandomMarginCrop(prob=0.8))
+    if is_train and cfg.INPUT.RANDOM_COPY_PASTE.ENABLED:
+        augmentation.append(T.Random_Copy_paste(prob=0.3))
     augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     return augmentation
 

@@ -78,6 +78,7 @@ _C.INPUT.CROP.SIZE = [0.9, 0.9]
 _C.INPUT.RANDOM_ROTATION_3D = CN({"ENABLED": False})
 _C.INPUT.RANDOM_Margin_CROP = CN({"ENABLED": False})
 _C.INPUT.RANDOM_COLOR_JITTER = CN({"ENABLED": False})
+_C.INPUT.RANDOM_COPY_PASTE = CN({"ENABLED": False})
 # Whether the model needs RGB, YUV, HSV etc.
 # Should be one of the modes defined here, as we use PIL to read the image:
 # https://pillow.readthedocs.io/en/stable/handbook/concepts.html#concept-modes

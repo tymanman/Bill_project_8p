@@ -9,7 +9,7 @@ playground
 *.diff
 *.jpg
 !/projects/DensePose/doc/images/*.jpg
-demo_out
+demo_out*/
 test
 *imgs/
 # compilation and distribution
