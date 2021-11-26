@@ -223,7 +223,7 @@ class DenseDetector(nn.Module):
                                pred_points[:,::2].max(1, keepdims=True)[0],
                                pred_points[:,1::2].max(1, keepdims=True)[0]],
                                1
-                                )
+                                ) if pred_points.shape[0] else torch.Tensor(0, 8).to(pred_points.device)
         return Instances(
             image_size, pred_boxes=Boxes(pred_boxes), pred_points=pred_points, scores=pred_scores, pred_classes=classes_idxs
         )
