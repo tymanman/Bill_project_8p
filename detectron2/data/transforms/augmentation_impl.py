@@ -661,7 +661,7 @@ class Random_Copy_paste(Augmentation):
     number of degrees counter clockwise around the given center.
     """
 
-    def __init__(self, prob=0.3, need_num_boxes=True, background_dir="../dataset/coco/val2017/"):
+    def __init__(self, prob=0.3, with_mosaic=False, need_num_boxes=True, background_dir="../dataset/coco/val2017/"):
         super().__init__()
         self._init(locals())
         self.background_list = os.listdir(background_dir)
@@ -671,6 +671,6 @@ class Random_Copy_paste(Augmentation):
         do = self._rand_range()
         if do<self.prob:
             det_img_path = os.path.join(self.background_dir, self.background_list[np.random.randint(len(self.background_list))])
-            return Copy_paste_Transform(det_img_path)
+            return Copy_paste_Transform(det_img_path, self.with_mosaic)
         else:
             return NoOpTransform()

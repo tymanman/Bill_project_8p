@@ -638,15 +638,16 @@ def build_augmentation(cfg, is_train):
             )
         )
     if is_train and cfg.INPUT.RANDOM_COLOR_JITTER.ENABLED:
-        augmentation.extend([T.RandomContrast(0.8, 1.2),
-                             T.RandomBrightness(0.8, 1.2),
-                             T.RandomSaturation(0.8, 1.2)])
+        max_, min_ = 1+cfg.INPUT.RANDOM_COLOR_JITTER.RANGE, 1-cfg.INPUT.RANDOM_COLOR_JITTER.RANGE
+        augmentation.extend([T.RandomContrast(min_, max_),
+                             T.RandomBrightness(min_, max_),
+                             T.RandomSaturation(min_, max_)])
     if is_train and cfg.INPUT.RANDOM_ROTATION_3D.ENABLED:
-        augmentation.append(T.RandomRotation3D(prob=0.8))
+        augmentation.append(T.RandomRotation3D(prob=cfg.INPUT.RANDOM_ROTATION_3D.PROB))
     if is_train and cfg.INPUT.RANDOM_Margin_CROP.ENABLED:
-        augmentation.append(T.RandomMarginCrop(prob=0.8))
+        augmentation.append(T.RandomMarginCrop(prob=cfg.INPUT.RANDOM_Margin_CROP.PROB))
     if is_train and cfg.INPUT.RANDOM_COPY_PASTE.ENABLED:
-        augmentation.append(T.Random_Copy_paste(prob=0.3))
+        augmentation.append(T.Random_Copy_paste(prob=cfg.INPUT.RANDOM_COPY_PASTE.PROB))
     augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     return augmentation
 

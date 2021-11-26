@@ -475,20 +475,32 @@ def Resize_rotated_box(transform, rotated_boxes):
     return rotated_boxes
 
 class Copy_paste_Transform(Transform):
-    def __init__(self, det_img_path, aug_with_box=True):
+    def __init__(self, det_img_path, with_mosaic= False, aug_with_box=True):
         super().__init__()
         self._set_attributes(locals())
         self.counter = 0
 
     def apply_image(self, src_img, boxes):
         assert boxes.shape[-1] == 2
+        w, h = src_img.shape[1], src_img.shape[0]
         num_boxes = boxes.shape[0]//4
+        roi_mask = np.zeros((h, w, 3)).astype(np.uint8)
+        # mosaic copy-paste by lili
+        if self.with_mosaic:
+            concate_mode = np.random.randint(4)
+            if concate_mode == 0:
+                roi_mask[:, :np.random.randint(w), :] = 1
+            elif concate_mode == 1:
+                roi_mask[:, np.random.randint(w):, :] = 1
+            elif concate_mode == 2:
+                roi_mask[:np.random.randint(h), :, :] = 1
+            elif concate_mode == 3:
+                roi_mask[np.random.randint(h):, :, :] = 1
+    
         self.paste_roi_index = set(np.random.choice(num_boxes, num_boxes,replace=True).tolist())
         roi_boxes = [boxes[index*4:(index+1)*4].astype(np.int64) for index in self.paste_roi_index]
-        w, h = src_img.shape[1], src_img.shape[0]
         det_img = cv2.imread(self.det_img_path)
         det_img = cv2.resize(det_img, (w, h))
-        roi_mask = np.zeros((h, w, 3)).astype(np.uint8)
         cv2.fillPoly(roi_mask, roi_boxes, (1, 1, 1))
         det_img = cv2.resize(det_img, (src_img.shape[1], src_img.shape[0]))
         aug_img = np.where(roi_mask, src_img, det_img).astype(np.uint8)

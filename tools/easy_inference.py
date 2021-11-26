@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     cfg = setup_cfg(args)
     root = args.root
-    res_dir = "demo_out_ori"
+    res_dir = args.output
     rectify = True
     model = build_model(cfg)
     model.eval()

@@ -76,9 +76,14 @@ _C.INPUT.CROP.TYPE = "relative_range"
 _C.INPUT.CROP.SIZE = [0.9, 0.9]
 
 _C.INPUT.RANDOM_ROTATION_3D = CN({"ENABLED": False})
+_C.INPUT.RANDOM_ROTATION_3D.PROB = 0.8
 _C.INPUT.RANDOM_Margin_CROP = CN({"ENABLED": False})
+_C.INPUT.RANDOM_Margin_CROP.PROB = 0.8
 _C.INPUT.RANDOM_COLOR_JITTER = CN({"ENABLED": False})
+_C.INPUT.RANDOM_COLOR_JITTER.RANGE = 0.2
 _C.INPUT.RANDOM_COPY_PASTE = CN({"ENABLED": False})
+_C.INPUT.RANDOM_COPY_PASTE.PROB = 0.1
+_C.INPUT.RANDOM_COPY_PASTE.WITH_MOSAIC = False
 # Whether the model needs RGB, YUV, HSV etc.
 # Should be one of the modes defined here, as we use PIL to read the image:
 # https://pillow.readthedocs.io/en/stable/handbook/concepts.html#concept-modes

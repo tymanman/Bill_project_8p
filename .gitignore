@@ -12,6 +12,7 @@ playground
 demo_out*/
 test
 *imgs/
+tmp/
 # compilation and distribution
 __pycache__
 _ext
